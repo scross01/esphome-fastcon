@@ -1,0 +1,43 @@
+# Example FastCon/brMesh group lights
+# Replace the mesh key and light IDs with your own values.
+
+external_components:
+  - source: github://scross01/esphome-fastcon@dev
+
+fastcon:
+  id: fastcon_controller
+  mesh_key: "12345678"
+
+light:
+  # Six consecutive lamps, IDs 1..6
+  - platform: fastcon_group_light
+    id: office_group
+    name: "Office Light"
+    controller_id: fastcon_controller
+    mesh_key: "12345678"
+    start_light_id: 1
+    mask: 0x3F
+    default_transition_length: 0s
+    restore_mode: ALWAYS_OFF
+
+  # Five consecutive lamps, IDs 7..11
+  - platform: fastcon_group_light
+    id: strip_group
+    name: "Light Strip"
+    controller_id: fastcon_controller
+    mesh_key: "12345678"
+    start_light_id: 7
+    mask: 0x1F
+    default_transition_length: 0s
+    restore_mode: ALWAYS_OFF
+
+  # Three consecutive lamps, IDs 18..20
+  - platform: fastcon_group_light
+    id: dining_upper_group
+    name: "Dining Upper"
+    controller_id: fastcon_controller
+    mesh_key: "12345678"
+    start_light_id: 18
+    mask: 0x07
+    default_transition_length: 0s
+    restore_mode: ALWAYS_OFF
