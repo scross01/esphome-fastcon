@@ -16,6 +16,7 @@ Be warned - there is also a brLight app, which might look like brMesh, but the p
 - RGB color control
 - White mode
 - Experimental group on/off, brightness and cold/warm white control
+- Experimental broadcast control of all lamps (on/off, brightness, RGB, cold/warm white)
 
 ## Configuration
 
@@ -126,6 +127,34 @@ Current limitations:
 - The group protocol is reverse engineered and may differ across app/firmware variants.
 
 See `docs/GROUP_PROTOCOL.md` for the reverse-engineered protocol notes and `examples/group_lights.yaml` for more examples.
+
+## Experimental broadcast light (all lamps, including RGB)
+
+The `fastcon_broadcast_light` platform controls **all lamps in the mesh with a single command**, the same way the brMesh app does when you control a group. Unlike `fastcon_group_light`, it needs no group selector and supports RGB.
+
+Supported features:
+
+- On/off
+- Brightness
+- RGB color
+- Cold/warm white color temperature
+
+```yaml
+light:
+  - platform: fastcon_broadcast_light
+    id: all_lamps
+    name: "All Lamps"
+    controller_id: fastcon_controller
+    mesh_key: "12345678"
+    default_transition_length: 0s
+    gamma_correct: 1.0
+```
+
+Notes:
+
+- The restored state is not sent at boot, so the lamps do not switch when the ESP restarts.
+- The single `fastcon` light entities do not know about broadcast changes. `examples/broadcast_light.yaml` shows an optional `on_state` lambda that keeps their on/off state in sync without sending extra commands.
+- Tested with 5 RGB + warm/cold white lamps in one mesh on an ESP32-S3. See `docs/BROADCAST_PROTOCOL.md` for the captured commands and open questions.
 
 ## Finding Your Mesh Key
 
