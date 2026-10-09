@@ -32,13 +32,49 @@ void FastconGroupLight::dump_config() {
 
 light::LightTraits FastconGroupLight::get_traits() {
   light::LightTraits traits;
-  if (color_interlock_) {
-    traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::COLD_WARM_WHITE});
-  } else {
-    traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
+
+  // Derive the color modes from the device type (the lamp's
+  // hardware capability) and the interlock preference. Device
+  // types are the brMesh constants (see FirstFragment.java:629-676):
+  //   43049 PWR   43050 RGBCW   43051 CCT   43168 RGB   43169 RGBW
+  switch (device_type_) {
+    case 43050:  // RGBCW — RGB + cold/warm white
+      if (color_interlock_) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::COLD_WARM_WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
+      }
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
+    case 43169:  // RGBW — RGB + single white
+      if (color_interlock_) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_WHITE});
+      }
+      break;
+    case 43168:  // RGB only
+      traits.set_supported_color_modes({light::ColorMode::RGB});
+      break;
+    case 43051:  // CCT — cold/warm white only
+      traits.set_supported_color_modes({light::ColorMode::COLD_WARM_WHITE});
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
+    case 43049:  // PWR — power only, no color modes
+      break;
+    default:  // unknown: assume RGBCW combined (backward compatible)
+      if (color_interlock_) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::COLD_WARM_WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
+      }
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
   }
-  traits.set_min_mireds(153.0f);
-  traits.set_max_mireds(500.0f);
+
   return traits;
 }
 
@@ -120,8 +156,8 @@ void FastconGroupLight::queue_group_control_(
       static_cast<uint8_t>((light_data.size() + 3) & 0x0F);
 
   control[0] = static_cast<uint8_t>((high_nibble << 4) | 0x03);
-  control[1] = 0x2A;
-  control[2] = 0xA8;
+  control[1] = static_cast<uint8_t>(device_type_ & 0xFF);
+  control[2] = static_cast<uint8_t>((device_type_ >> 8) & 0xFF);
   control[3] = 0xFD;
 
   const size_t copy_len = std::min<size_t>(light_data.size(), 8);
@@ -171,16 +207,39 @@ void FastconGroupLight::write_state(light::LightState *state) {
     bri7 = 1;
   const uint8_t on_bri = static_cast<uint8_t>(0x80 | bri7);
 
+  // White-only command. ESPHome's current_values_as_rgbww() returns
+  // all zeros for WHITE mode — the white value lives in a separate
+  // channel that as_rgb()/as_cwww() do not read for WHITE — so it
+  // cannot be resolved that way. The app sends warm=cold=0x7F with
+  // the brightness in byte 0 (docs/GROUP_PROTOCOL.md), matching the
+  // single light's get_white_light_data().
+  if (values.get_color_mode() == light::ColorMode::WHITE) {
+    queue_group_control_({on_bri, 0x00, 0x00, 0x00, 0x7F, 0x7F});
+    ESP_LOGD(TAG, "Group white bri=%u/127 start=%u mask=0x%02X",
+             bri7, start_light_id_, mask_);
+    return;
+  }
+
   // Resolve the channel levels for the current color mode. This
   // handles RGB, COLD_WARM_WHITE and the combined RGB_COLD_WARM_WHITE
   // mode, so a color-temperature change is emitted as warm/cold bytes.
   float r = 0.0f, g = 0.0f, b = 0.0f, cw = 0.0f, ww = 0.0f;
   state->current_values_as_rgbww(&r, &g, &b, &cw, &ww, /*constant_brightness=*/false);
 
-  // Fallback for zeroed channels (no color set): warm white so the
-  // lamp is visible, matching the single-light fallback.
+  // Fallback for zeroed channels (no color set): RGB/RGBW lamps
+  // have no cold/warm white LEDs, so fall back to RGB white;
+  // RGBCW/CCT lamps fall back to warm white, so the lamp is
+  // visible.
   if (all_zero_(r, g, b, cw, ww)) {
-    ww = 1.0f;
+    switch (device_type_) {
+      case 43168:  // RGB only
+      case 43169:  // RGBW (single white, no CW/WW)
+        r = g = b = 1.0f;
+        break;
+      default:  // 43050 RGBCW, 43051 CCT, unknown (assume RGBCW)
+        ww = 1.0f;
+        break;
+    }
   }
 
   std::vector<uint8_t> light_data{

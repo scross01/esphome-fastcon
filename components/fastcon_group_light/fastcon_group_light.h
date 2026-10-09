@@ -18,6 +18,7 @@ class FastconGroupLight : public Component, public light::LightOutput {
   void set_mesh_key(std::array<uint8_t, 4> key) { mesh_key_ = key; }
   void set_start_light_id(uint8_t id) { start_light_id_ = id; }
   void set_mask(uint8_t mask) { mask_ = mask; }
+  void set_device_type(uint16_t device_type) { device_type_ = device_type; }
   void set_color_interlock(bool interlock) { color_interlock_ = interlock; }
 
   void dump_config() override;
@@ -39,6 +40,7 @@ class FastconGroupLight : public Component, public light::LightOutput {
   std::array<uint8_t, 4> mesh_key_{};
   uint8_t start_light_id_{0};
   uint8_t mask_{0};
+  uint16_t device_type_{43050};  // 0xA82A, RGBCW (brMesh default)
   uint8_t sequence_{1};
   bool was_on_{false};
   bool color_interlock_{false};
