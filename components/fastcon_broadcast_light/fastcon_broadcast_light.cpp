@@ -16,6 +16,10 @@ static inline uint8_t to_u8_(float value) {
   return static_cast<uint8_t>(value * 255.0f + 0.5f);
 }
 
+static inline bool all_zero_(float r, float g, float b) {
+  return r == 0.0f && g == 0.0f && b == 0.0f;
+}
+
 void FastconBroadcastLight::dump_config() { ESP_LOGCONFIG(TAG, "FastCon Broadcast Light (all lamps at once)"); }
 
 light::LightTraits FastconBroadcastLight::get_traits() {
@@ -116,11 +120,29 @@ void FastconBroadcastLight::write_state(light::LightState *state) {
     return;
   }
 
-  const uint8_t r = to_u8_(values.get_red());
-  const uint8_t g = to_u8_(values.get_green());
-  const uint8_t b = to_u8_(values.get_blue());
-  queue_broadcast_({on_bri, b, r, g, 0x00, 0x00});
-  ESP_LOGD(TAG, "All lamps COLOR: bri=%u/127 R=%u G=%u B=%u", bri7, r, g, b);
+  float r = values.get_red();
+  float g = values.get_green();
+  float b = values.get_blue();
+
+  // Fallback for zeroed channels (no color set): light a neutral
+  // white so the lamp is visible, matching the single-light
+  // fallback in fastcon_controller.cpp. The broadcast light always
+  // supports CW/WW, so prefer warm white.
+  if (all_zero_(r, g, b)) {
+    const float mired = std::min(std::max(values.get_color_temperature(), 153.0f), 500.0f);
+    const float warm_ratio = (mired - 153.0f) / (500.0f - 153.0f);
+    const uint8_t warm = to_u8_(warm_ratio);
+    const uint8_t cold = to_u8_(1.0f - warm_ratio);
+    queue_broadcast_({on_bri, 0x00, 0x00, 0x00, warm, cold});
+    ESP_LOGD(TAG, "All lamps WHITE (fallback): bri=%u/127 warm=%u cold=%u", bri7, warm, cold);
+    return;
+  }
+
+  const uint8_t r8 = to_u8_(r);
+  const uint8_t g8 = to_u8_(g);
+  const uint8_t b8 = to_u8_(b);
+  queue_broadcast_({on_bri, b8, r8, g8, 0x00, 0x00});
+  ESP_LOGD(TAG, "All lamps COLOR: bri=%u/127 R=%u G=%u B=%u", bri7, r8, g8, b8);
 }
 
 }  // namespace fastcon_broadcast_light
