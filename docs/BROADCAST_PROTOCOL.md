@@ -42,6 +42,25 @@ Interpretation:
 The outer packet (type 5, sequence number, last mesh-key byte, checksum, encryption and BLE wrapper)
 is identical to single-light commands; the `send--->` log lines confirm this.
 
+## Implementation notes
+
+- **Power-on transition:** the lamps switch OFF→ON only via the 1-byte
+  power command (`43 2A A8 00 80`). The 6-byte color/white command
+  (`93 ...`) adjusts color/brightness but does not trigger the
+  power-on transition. `fastcon_broadcast_light` therefore sends the
+  1-byte power command when turning on, then the color/white command.
+- **All-zero fallback:** when turning on with no color set (all RGB
+  channels zero), the implementation sends a warm-white command
+  (non-zero warm/cold) so the lamp is visible, mirroring the
+  single-light fallback in `fastcon_controller.cpp`.
+- **Outer body[0] lightness nibble:** the low 4 bits of the outer
+  `body[0]` byte carry a lightness value. The app uses lightness=100
+  (0x64), so a forward color/white command has `body[0] = 0xD4`
+  (`0xD0 | 0x04`). The implementation matches this.
+- **Device type:** the type bytes (`2A A8` = RGBCW, 43050) are
+  configurable via the optional `device_type` key. Other FastCon
+  types: RGB=43168 (0xA8A0), RGBW=43169 (0xA8A1), CCT=43051 (0xA82B).
+
 ## Test setup
 
 - 5 brMesh RGB + warm/cold white ceiling lamps, all in one mesh (IDs 1-5)
