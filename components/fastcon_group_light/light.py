@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import light
-from esphome.const import CONF_OUTPUT_ID
+from esphome.const import CONF_COLOR_INTERLOCK, CONF_OUTPUT_ID
 from esphome.core import HexInt
 
 DEPENDENCIES = ["fastcon", "light"]
@@ -34,13 +34,14 @@ def validate_hex_bytes(value):
 
 
 CONFIG_SCHEMA = (
-    light.BRIGHTNESS_ONLY_LIGHT_SCHEMA
+    light.RGB_LIGHT_SCHEMA
     .extend({
         cv.GenerateID(CONF_OUTPUT_ID): cv.declare_id(FastconGroupLight),
         cv.Required(CONF_CONTROLLER_ID): cv.use_id(FastconController),
         cv.Required(CONF_MESH_KEY): validate_hex_bytes,
         cv.Required(CONF_START_LIGHT_ID): cv.int_range(min=1, max=255),
         cv.Required(CONF_MASK): cv.int_range(min=1, max=255),
+        cv.Optional(CONF_COLOR_INTERLOCK, default=False): cv.boolean,
     })
     .extend(cv.COMPONENT_SCHEMA)
 )
@@ -61,3 +62,6 @@ async def to_code(config):
 
     cg.add(var.set_start_light_id(config[CONF_START_LIGHT_ID]))
     cg.add(var.set_mask(config[CONF_MASK]))
+
+    if config.get(CONF_COLOR_INTERLOCK):
+        cg.add(var.set_color_interlock(True))
