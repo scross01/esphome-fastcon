@@ -9,6 +9,7 @@ AUTO_LOAD = ["light"]
 
 CONF_CONTROLLER_ID = "controller_id"
 CONF_MESH_KEY = "mesh_key"
+CONF_DEVICE_TYPE = "device_type"
 
 fastcon_ns = cg.esphome_ns.namespace("fastcon")
 FastconController = fastcon_ns.class_("FastconController", cg.Component)
@@ -37,6 +38,7 @@ CONFIG_SCHEMA = (
             cv.GenerateID(CONF_OUTPUT_ID): cv.declare_id(FastconBroadcastLight),
             cv.Required(CONF_CONTROLLER_ID): cv.use_id(FastconController),
             cv.Required(CONF_MESH_KEY): validate_mesh_key,
+            cv.Optional(CONF_DEVICE_TYPE, default=43050): cv.int_range(min=0, max=65535),
         }
     ).extend(cv.COMPONENT_SCHEMA)
 )
@@ -54,3 +56,6 @@ async def to_code(config):
     mesh_key = config[CONF_MESH_KEY]
     key_bytes = [(mesh_key >> (i * 8)) & 0xFF for i in range(3, -1, -1)]
     cg.add(var.set_mesh_key(key_bytes))
+
+    device_type = config[CONF_DEVICE_TYPE]
+    cg.add(var.set_device_type(device_type))

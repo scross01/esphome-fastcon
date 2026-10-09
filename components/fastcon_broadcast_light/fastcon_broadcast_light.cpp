@@ -63,10 +63,10 @@ std::vector<uint8_t> FastconBroadcastLight::build_encrypted_body_(uint8_t n, con
 void FastconBroadcastLight::queue_broadcast_(const std::vector<uint8_t> &light_data) {
   std::vector<uint8_t> control(12, 0x00);
 
-  // Header: high nibble = data length + 3 (0x43 for off, 0x93 for color/white), then 2A A8, target 00 = all lamps
+  // Header: high nibble = data length + 3 (0x43 for off, 0x93 for color/white), then device type (little-endian), target 00 = all lamps
   control[0] = static_cast<uint8_t>((((light_data.size() + 3) & 0x0F) << 4) | 0x03);
-  control[1] = 0x2A;
-  control[2] = 0xA8;
+  control[1] = static_cast<uint8_t>(device_type_ & 0xFF);
+  control[2] = static_cast<uint8_t>((device_type_ >> 8) & 0xFF);
   control[3] = 0x00;
 
   const size_t copy_len = std::min<size_t>(light_data.size(), 8);
