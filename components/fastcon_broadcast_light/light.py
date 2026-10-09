@@ -45,8 +45,8 @@ CONFIG_SCHEMA = (
     light.RGB_LIGHT_SCHEMA.extend(
         {
             cv.GenerateID(CONF_OUTPUT_ID): cv.declare_id(FastconBroadcastLight),
-            cv.Required(CONF_CONTROLLER_ID): cv.use_id(FastconController),
-            cv.Required(CONF_MESH_KEY): validate_mesh_key,
+            cv.Optional(CONF_CONTROLLER_ID, default="fastcon_controller"): cv.use_id(FastconController),
+            cv.Optional(CONF_MESH_KEY): validate_mesh_key,
             cv.Optional(CONF_DEVICE_TYPE, default="rgbcw"): cv.enum(DEVICE_TYPES, lower=True),
             cv.Optional(CONF_COLOR_INTERLOCK, default=False): cv.boolean,
         }
@@ -63,9 +63,10 @@ async def to_code(config):
     controller = await cg.get_variable(config[CONF_CONTROLLER_ID])
     cg.add(var.set_controller(controller))
 
-    mesh_key = config[CONF_MESH_KEY]
-    key_bytes = [(mesh_key >> (i * 8)) & 0xFF for i in range(3, -1, -1)]
-    cg.add(var.set_mesh_key(key_bytes))
+    if CONF_MESH_KEY in config:
+        mesh_key = config[CONF_MESH_KEY]
+        key_bytes = [(mesh_key >> (i * 8)) & 0xFF for i in range(3, -1, -1)]
+        cg.add(var.set_mesh_key(key_bytes))
 
     device_type = DEVICE_TYPES[config[CONF_DEVICE_TYPE]]
     cg.add(var.set_device_type(device_type))

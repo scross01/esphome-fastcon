@@ -39,6 +39,7 @@ namespace esphome
             void set_max_queue_size(size_t size) { max_queue_size_ = size; }
 
             void set_mesh_key(std::array<uint8_t, 4> key) { mesh_key_ = key; }
+            const std::array<uint8_t, 4> &get_mesh_key() const { return mesh_key_; }
             void set_adv_interval_min(uint16_t val) { adv_interval_min_ = val; }
             void set_adv_interval_max(uint16_t val)
             {

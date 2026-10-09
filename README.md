@@ -80,8 +80,8 @@ light:
 
 #### Fastcon Broadcast Light
 
-- **controller_id** (*Required*, ID): The ID of the controller to use.
-- **mesh_key** (*Required*, string): The mesh key in hexadecimal format (8 characters/4 bytes).
+- **controller_id** (*Optional*, ID): The ID of the controller to use. Defaults to "fastcon_controller".
+- **mesh_key** (*Optional*, string): The mesh key in hexadecimal format (8 characters/4 bytes). Defaults to the controller's mesh key.
 - **device_type** (*Optional*, enum): The brMesh device type of the lamps. One of `rgbcw` (RGB + cold/warm white, default), `rgbw` (RGB + single white), `rgb` (RGB only), `cct` (cold/warm white only), or `pwr` (power only). It sets the protocol header type byte and derives the advertised color modes (see table below).
 - **color_interlock** (*Optional*, boolean): Set to `true` to expose separate, interlocked color and white controls instead of one combined control. Defaults to `false`.
 

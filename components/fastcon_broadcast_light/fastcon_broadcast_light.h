@@ -19,7 +19,10 @@ namespace fastcon_broadcast_light {
 class FastconBroadcastLight : public Component, public light::LightOutput {
  public:
   void set_controller(fastcon::FastconController *controller) { controller_ = controller; }
-  void set_mesh_key(std::array<uint8_t, 4> key) { mesh_key_ = key; }
+  void set_mesh_key(std::array<uint8_t, 4> key) {
+    mesh_key_ = key;
+    mesh_key_set_ = true;
+  }
   void set_device_type(uint16_t device_type) { device_type_ = device_type; }
   void set_color_interlock(bool interlock) { color_interlock_ = interlock; }
 
@@ -33,6 +36,7 @@ class FastconBroadcastLight : public Component, public light::LightOutput {
 
   fastcon::FastconController *controller_{nullptr};
   std::array<uint8_t, 4> mesh_key_{};
+  bool mesh_key_set_{false};
   uint16_t device_type_{43050};
   uint8_t sequence_{1};
   bool first_write_{true};
