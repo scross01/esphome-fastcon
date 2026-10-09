@@ -16,6 +16,7 @@ Be warned - there is also a brLight app, which might look like brMesh, but the p
 - RGB color control
 - White mode
 - Experimental group on/off, brightness and cold/warm white control
+- Experimental broadcast control of all lamps (on/off, brightness, RGB, cold/warm white)
 
 ## Configuration
 
@@ -77,6 +78,23 @@ light:
 - **supports_cwww** (*Optional*, boolean): Set to `true` if the light supports cold/warm white channels. Defaults to `false`.
 - **color_interlock** (*Optional*, boolean): Set to `true` to prevent RGB and white LEDs from being on at the same time. Defaults to `false`.
 
+#### Fastcon Broadcast Light
+
+- **controller_id** (*Optional*, ID): The ID of the controller to use. Defaults to "fastcon_controller".
+- **mesh_key** (*Optional*, string): The mesh key in hexadecimal format (8 characters/4 bytes). Defaults to the controller's mesh key.
+- **device_type** (*Optional*, enum): The brMesh device type of the lamps. One of `rgbcw` (RGB + cold/warm white, default), `rgbw` (RGB + single white), `rgb` (RGB only), `cct` (cold/warm white only), or `pwr` (power only). It sets the protocol header type byte and derives the advertised color modes (see table below).
+- **color_interlock** (*Optional*, boolean): Set to `true` to expose separate, interlocked color and white controls instead of one combined control. Defaults to `false`.
+
+The `device_type` determines which color modes the entity advertises to Home Assistant:
+
+| `device_type` | `color_interlock: false` | `color_interlock: true` |
+|---------------|--------------------------|-------------------------|
+| `rgbcw` (43050) | `RGB` + cold/warm white (combined) | `RGB` and cold/warm white (separate) |
+| `rgbw` (43169) | `RGB` + white (combined) | `RGB` and white (separate) |
+| `rgb` (43168) | `RGB` | `RGB` |
+| `cct` (43051) | cold/warm white | cold/warm white |
+| `pwr` (43049) | on/off only | on/off only |
+
 ## Experimental group light control
 
 The `fastcon_group_light` platform sends a temporary brMesh/FastCon group selector followed by one group control command. This avoids queuing one command per lamp and gives near-simultaneous switching for a group of consecutive light IDs.
@@ -126,6 +144,38 @@ Current limitations:
 - The group protocol is reverse engineered and may differ across app/firmware variants.
 
 See `docs/GROUP_PROTOCOL.md` for the reverse-engineered protocol notes and `examples/group_lights.yaml` for more examples.
+
+## Experimental broadcast light (all lamps, including RGB)
+
+The `fastcon_broadcast_light` platform controls **all lamps in the mesh with a single command**, the same way the brMesh app does when you control a group. Unlike `fastcon_group_light`, it needs no group selector and supports RGB.
+
+Supported features:
+
+- On/off
+- Brightness
+- RGB color
+- Cold/warm white color temperature
+
+The available color modes depend on the `device_type` of your lamps (see **Fastcon Broadcast Light** above). For example, RGB + single-white lamps (`device_type: rgbw`) expose a plain white slider, not a color-temperature slider.
+
+```yaml
+light:
+  - platform: fastcon_broadcast_light
+    id: all_lamps
+    name: "All Lamps"
+    controller_id: fastcon_controller
+    mesh_key: "12345678"
+    device_type: rgbcw       # brMesh device type of the lamps (see below)
+    color_interlock: false   # one combined color and white control
+    default_transition_length: 0s
+    gamma_correct: 1.0
+```
+
+Notes:
+
+- The restored state is not sent at boot, so the lamps do not switch when the ESP restarts.
+- The single `fastcon` light entities do not know about broadcast changes. `examples/broadcast_light.yaml` shows an optional `on_state` lambda that keeps their on/off state in sync without sending extra commands.
+- Tested with 5 RGB + warm/cold white lamps in one mesh on an ESP32-S3. See `docs/BROADCAST_PROTOCOL.md` for the captured commands and open questions.
 
 ## Finding Your Mesh Key
 

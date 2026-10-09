@@ -95,6 +95,19 @@ Each group state change sends:
 
 This is substantially faster than queuing individual commands for every lamp.
 
+## Implementation notes
+
+- **Power-on transition:** the lamps switch OFF→ON only via the 1-byte
+  power command (`43 2A A8 FD 80`, padded to 12 bytes on the wire).
+  The implementation sends this when turning on, matching the app's
+  `genSingleLightCommand` power case. The 6-byte cold/warm command
+  (`93 ...`) adjusts color/brightness but does not trigger the
+  power-on transition.
+- **Outer body[0] lightness nibble:** the low 4 bits of the outer
+  `body[0]` byte carry a lightness value. The app uses lightness=100
+  (0x64), so a forward command has `body[0] = 0xD4`. The
+  implementation matches this.
+
 ## Known limitations
 
 - No acknowledgement/state feedback from the bulbs.

@@ -35,10 +35,10 @@ light::LightTraits FastconGroupLight::get_traits() {
 }
 
 std::vector<uint8_t> FastconGroupLight::build_encrypted_body_(
-    uint8_t n, const std::vector<uint8_t> &data, bool forward) {
+    uint8_t n, const std::vector<uint8_t> &data, bool forward, uint8_t lightness) {
   std::vector<uint8_t> body(data.size() + 4, 0);
 
-  body[0] = ((n & 0x07) << 4) | (forward ? 0x80 : 0);
+  body[0] = static_cast<uint8_t>(((n & 0x07) << 4) | (forward ? 0x80 : 0) | (lightness & 0x0F));
   body[1] = sequence_++;
   if (sequence_ == 0 || sequence_ == 0xFF)
     sequence_ = 1;
@@ -143,6 +143,13 @@ void FastconGroupLight::write_state(light::LightState *state) {
              start_light_id_, mask_);
     return;
   }
+
+  // Power on: the lamps only transition OFF->ON via a 1-byte power
+  // command (0x80). The 6-byte white command below adjusts the
+  // warm/cold mix but does not turn the lamps on.
+  queue_group_control_({0x80});
+  ESP_LOGD(TAG, "Group ON (power) start=%u mask=0x%02X",
+           start_light_id_, mask_);
 
   float brightness = values.get_brightness();
   if (brightness < 0.0f) brightness = 0.0f;

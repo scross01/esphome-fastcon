@@ -1,0 +1,40 @@
+# Example: control all brMesh/FastCon lamps in the mesh at once, including RGB.
+# Replace the mesh key with your own value.
+
+external_components:
+  - source: github://scross01/esphome-fastcon@dev
+
+fastcon:
+  id: fastcon_controller
+  mesh_key: "12345678"
+
+light:
+  # Single lamps (optional)
+  - platform: fastcon
+    id: lamp_1
+    name: "Lamp 1"
+    light_id: 1
+  - platform: fastcon
+    id: lamp_2
+    name: "Lamp 2"
+    light_id: 2
+
+  # All lamps at once: one BLE command for on/off, brightness, RGB and warm/cold white
+  - platform: fastcon_broadcast_light
+    id: all_lamps
+    name: "All Lamps"
+    controller_id: fastcon_controller
+    mesh_key: "12345678"
+    default_transition_length: 0s
+    gamma_correct: 1.0
+    # Optional: keep the on/off state of the single lamp entities in sync
+    # without sending extra commands.
+    on_state:
+      - lambda: |-
+          const bool on = id(all_lamps).remote_values.is_on();
+          for (auto *lamp : {id(lamp_1), id(lamp_2)}) {
+            if (lamp->remote_values.is_on() == on) continue;
+            lamp->current_values.set_state(on);
+            lamp->remote_values.set_state(on);
+            lamp->publish_state();
+          }
