@@ -25,7 +25,7 @@ class FastconGroupLight : public Component, public light::LightOutput {
 
  protected:
   std::vector<uint8_t> build_encrypted_body_(
-      uint8_t n, const std::vector<uint8_t> &data, bool forward = true);
+      uint8_t n, const std::vector<uint8_t> &data, bool forward = true, uint8_t lightness = 100);
   std::vector<uint8_t> prepare_standard_payload_(
       const std::vector<uint8_t> &body);
   std::vector<uint8_t> prepare_long_ble_payload_(

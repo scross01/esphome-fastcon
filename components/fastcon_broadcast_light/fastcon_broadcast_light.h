@@ -26,7 +26,7 @@ class FastconBroadcastLight : public Component, public light::LightOutput {
   void write_state(light::LightState *state) override;
 
  protected:
-  std::vector<uint8_t> build_encrypted_body_(uint8_t n, const std::vector<uint8_t> &data, bool forward = true);
+  std::vector<uint8_t> build_encrypted_body_(uint8_t n, const std::vector<uint8_t> &data, bool forward = true, uint8_t lightness = 100);
   void queue_broadcast_(const std::vector<uint8_t> &light_data);
 
   fastcon::FastconController *controller_{nullptr};

@@ -35,10 +35,10 @@ light::LightTraits FastconGroupLight::get_traits() {
 }
 
 std::vector<uint8_t> FastconGroupLight::build_encrypted_body_(
-    uint8_t n, const std::vector<uint8_t> &data, bool forward) {
+    uint8_t n, const std::vector<uint8_t> &data, bool forward, uint8_t lightness) {
   std::vector<uint8_t> body(data.size() + 4, 0);
 
-  body[0] = ((n & 0x07) << 4) | (forward ? 0x80 : 0);
+  body[0] = static_cast<uint8_t>(((n & 0x07) << 4) | (forward ? 0x80 : 0) | (lightness & 0x0F));
   body[1] = sequence_++;
   if (sequence_ == 0 || sequence_ == 0xFF)
     sequence_ = 1;
