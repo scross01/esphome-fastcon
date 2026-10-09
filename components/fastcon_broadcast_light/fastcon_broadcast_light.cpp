@@ -16,15 +16,15 @@ static inline uint8_t to_u8_(float value) {
   return static_cast<uint8_t>(value * 255.0f + 0.5f);
 }
 
-static inline bool all_zero_(float r, float g, float b) {
-  return r == 0.0f && g == 0.0f && b == 0.0f;
+static inline bool all_zero_(float r, float g, float b, float cw, float ww) {
+  return r == 0.0f && g == 0.0f && b == 0.0f && cw == 0.0f && ww == 0.0f;
 }
 
 void FastconBroadcastLight::dump_config() { ESP_LOGCONFIG(TAG, "FastCon Broadcast Light (all lamps at once)"); }
 
 light::LightTraits FastconBroadcastLight::get_traits() {
   light::LightTraits traits;
-  traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::COLOR_TEMPERATURE});
+  traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
   traits.set_min_mireds(153.0f);
   traits.set_max_mireds(500.0f);
   return traits;
@@ -83,26 +83,40 @@ void FastconBroadcastLight::write_state(light::LightState *state) {
     return;
   }
 
-  // Do not send anything for the restored state at boot, so the lamps do not
-  // switch unexpectedly when the ESP reboots.
+  const auto &values = state->current_values;
+  const bool is_on = values.is_on();
+
+  // Do not send anything for the restored state at boot, so the lamps do
+  // not switch unexpectedly when the ESP reboots.
   if (first_write_) {
     first_write_ = false;
+    was_on_ = is_on;
     return;
   }
 
-  const auto &values = state->current_values;
-
-  if (!values.is_on()) {
+  if (!is_on) {
     queue_broadcast_({0x00});
+    was_on_ = false;
     ESP_LOGD(TAG, "All lamps OFF");
     return;
   }
 
   // Power on: the lamps only transition OFF->ON via a 1-byte power
-  // command (0x80). The 6-byte color/white command below adjusts
-  // color/brightness but does not turn the lamp on.
-  queue_broadcast_({0x80});
-  ESP_LOGD(TAG, "All lamps ON (power)");
+  // command (0x80). Send it only on that transition — the app does not
+  // repeat it for brightness/color/white changes while the lamp is
+  // already on, and repeating it resets the lamp to its previous state,
+  // which overrides the 6-byte command below.
+  if (!was_on_) {
+    queue_broadcast_({0x80});
+    ESP_LOGD(TAG, "All lamps ON (power)");
+  }
+  was_on_ = true;
+
+  // Resolve the channel levels for the current color mode. This handles
+  // RGB, COLD_WARM_WHITE and the combined RGB_COLD_WARM_WHITE mode, so a
+  // color-temperature change is emitted as warm/cold bytes.
+  float r = 0.0f, g = 0.0f, b = 0.0f, cw = 0.0f, ww = 0.0f;
+  state->current_values_as_rgbww(&r, &g, &b, &cw, &ww, /*constant_brightness=*/false);
 
   const float brightness = std::min(std::max(values.get_brightness(), 0.0f), 1.0f);
   uint8_t bri7 = static_cast<uint8_t>(brightness * 127.0f + 0.5f);
@@ -110,39 +124,15 @@ void FastconBroadcastLight::write_state(light::LightState *state) {
     bri7 = 1;
   const uint8_t on_bri = static_cast<uint8_t>(0x80 | bri7);
 
-  if (values.get_color_mode() == light::ColorMode::COLOR_TEMPERATURE) {
-    const float mired = std::min(std::max(values.get_color_temperature(), 153.0f), 500.0f);
-    const float warm_ratio = (mired - 153.0f) / (500.0f - 153.0f);
-    const uint8_t warm = to_u8_(warm_ratio);
-    const uint8_t cold = to_u8_(1.0f - warm_ratio);
-    queue_broadcast_({on_bri, 0x00, 0x00, 0x00, warm, cold});
-    ESP_LOGD(TAG, "All lamps WHITE: bri=%u/127 warm=%u cold=%u", bri7, warm, cold);
-    return;
+  // Fallback for zeroed channels (no color set): warm white so the lamp
+  // is visible, matching the single-light fallback.
+  if (all_zero_(r, g, b, cw, ww)) {
+    ww = 1.0f;
   }
 
-  float r = values.get_red();
-  float g = values.get_green();
-  float b = values.get_blue();
-
-  // Fallback for zeroed channels (no color set): light a neutral
-  // white so the lamp is visible, matching the single-light
-  // fallback in fastcon_controller.cpp. The broadcast light always
-  // supports CW/WW, so prefer warm white.
-  if (all_zero_(r, g, b)) {
-    const float mired = std::min(std::max(values.get_color_temperature(), 153.0f), 500.0f);
-    const float warm_ratio = (mired - 153.0f) / (500.0f - 153.0f);
-    const uint8_t warm = to_u8_(warm_ratio);
-    const uint8_t cold = to_u8_(1.0f - warm_ratio);
-    queue_broadcast_({on_bri, 0x00, 0x00, 0x00, warm, cold});
-    ESP_LOGD(TAG, "All lamps WHITE (fallback): bri=%u/127 warm=%u cold=%u", bri7, warm, cold);
-    return;
-  }
-
-  const uint8_t r8 = to_u8_(r);
-  const uint8_t g8 = to_u8_(g);
-  const uint8_t b8 = to_u8_(b);
-  queue_broadcast_({on_bri, b8, r8, g8, 0x00, 0x00});
-  ESP_LOGD(TAG, "All lamps COLOR: bri=%u/127 R=%u G=%u B=%u", bri7, r8, g8, b8);
+  queue_broadcast_({on_bri, to_u8_(b), to_u8_(r), to_u8_(g), to_u8_(ww), to_u8_(cw)});
+  ESP_LOGD(TAG, "All lamps: bri=%u/127 R=%u G=%u B=%u warm=%u cold=%u",
+           bri7, to_u8_(r), to_u8_(g), to_u8_(b), to_u8_(ww), to_u8_(cw));
 }
 
 }  // namespace fastcon_broadcast_light

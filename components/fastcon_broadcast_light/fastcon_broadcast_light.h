@@ -35,6 +35,7 @@ class FastconBroadcastLight : public Component, public light::LightOutput {
   uint16_t device_type_{43050};
   uint8_t sequence_{1};
   bool first_write_{true};
+  bool was_on_{false};
 };
 
 }  // namespace fastcon_broadcast_light
