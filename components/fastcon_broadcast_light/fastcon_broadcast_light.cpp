@@ -183,10 +183,19 @@ void FastconBroadcastLight::write_state(light::LightState *state) {
   float r = 0.0f, g = 0.0f, b = 0.0f, cw = 0.0f, ww = 0.0f;
   state->current_values_as_rgbww(&r, &g, &b, &cw, &ww, /*constant_brightness=*/false);
 
-  // Fallback for zeroed channels (no color set): warm white so the lamp
-  // is visible, matching the single-light fallback.
+  // Fallback for zeroed channels (no color set): RGB/RGBW lamps have
+  // no cold/warm white LEDs, so fall back to RGB white; RGBCW/CCT
+  // lamps fall back to warm white, so the lamp is visible.
   if (all_zero_(r, g, b, cw, ww)) {
-    ww = 1.0f;
+    switch (device_type_) {
+      case 43168:  // RGB only
+      case 43169:  // RGBW (single white, no CW/WW)
+        r = g = b = 1.0f;
+        break;
+      default:  // 43050 RGBCW, 43051 CCT, unknown (assume RGBCW)
+        ww = 1.0f;
+        break;
+    }
   }
 
   queue_broadcast_({on_bri, to_u8_(b), to_u8_(r), to_u8_(g), to_u8_(ww), to_u8_(cw)});

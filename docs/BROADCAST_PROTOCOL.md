@@ -49,10 +49,14 @@ is identical to single-light commands; the `send--->` log lines confirm this.
   (`93 ...`) adjusts color/brightness but does not trigger the
   power-on transition. `fastcon_broadcast_light` therefore sends the
   1-byte power command when turning on, then the color/white command.
-- **All-zero fallback:** when turning on with no color set (all RGB
-  channels zero), the implementation sends a warm-white command
-  (non-zero warm/cold) so the lamp is visible, mirroring the
-  single-light fallback in `fastcon_controller.cpp`.
+- **All-zero fallback:** when turning on with no color set (all
+  channels zero), the implementation falls back to a non-zero
+  channel so the lamp is visible, mirroring the single-light
+  fallback in `fastcon_controller.cpp`. It is device-type-aware:
+  `rgb`/`rgbw` lamps (43168/43169) have no cold/warm white
+  LEDs, so they fall back to RGB white (`r=g=b=1`); `rgbcw`
+  and `cct` lamps (43050/43051) fall back to warm white
+  (`ww=1`).
 - **Outer body[0] lightness nibble:** the low 4 bits of the outer
   `body[0]` byte carry a lightness value. The app uses lightness=100
   (0x64), so a forward color/white command has `body[0] = 0xD4`

@@ -166,7 +166,7 @@ light:
     controller_id: fastcon_controller
     mesh_key: "12345678"
     device_type: rgbcw       # brMesh device type of the lamps (see below)
-    color_interlock: false   # separate color and white controls
+    color_interlock: false   # one combined color and white control
     default_transition_length: 0s
     gamma_correct: 1.0
 ```
