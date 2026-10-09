@@ -153,17 +153,29 @@ void FastconBroadcastLight::write_state(light::LightState *state) {
   }
   was_on_ = true;
 
-  // Resolve the channel levels for the current color mode. This handles
-  // RGB, COLD_WARM_WHITE and the combined RGB_COLD_WARM_WHITE mode, so a
-  // color-temperature change is emitted as warm/cold bytes.
-  float r = 0.0f, g = 0.0f, b = 0.0f, cw = 0.0f, ww = 0.0f;
-  state->current_values_as_rgbww(&r, &g, &b, &cw, &ww, /*constant_brightness=*/false);
-
   const float brightness = std::min(std::max(values.get_brightness(), 0.0f), 1.0f);
   uint8_t bri7 = static_cast<uint8_t>(brightness * 127.0f + 0.5f);
   if (bri7 == 0)
     bri7 = 1;
   const uint8_t on_bri = static_cast<uint8_t>(0x80 | bri7);
+
+  // White-only command. ESPHome's current_values_as_rgbww() returns
+  // all zeros for WHITE mode — the white value lives in a separate
+  // channel that as_rgb()/as_cwww() do not read for WHITE — so it
+  // cannot be resolved that way. The app sends warm=cold=0x7F with
+  // the brightness in byte 0 (docs/BROADCAST_PROTOCOL.md), matching
+  // the single light's get_white_light_data().
+  if (values.get_color_mode() == light::ColorMode::WHITE) {
+    queue_broadcast_({on_bri, 0x00, 0x00, 0x00, 0x7F, 0x7F});
+    ESP_LOGD(TAG, "All lamps: white bri=%u/127", bri7);
+    return;
+  }
+
+  // Resolve the channel levels for the current color mode. This handles
+  // RGB, COLD_WARM_WHITE and the combined RGB_COLD_WARM_WHITE mode, so a
+  // color-temperature change is emitted as warm/cold bytes.
+  float r = 0.0f, g = 0.0f, b = 0.0f, cw = 0.0f, ww = 0.0f;
+  state->current_values_as_rgbww(&r, &g, &b, &cw, &ww, /*constant_brightness=*/false);
 
   // Fallback for zeroed channels (no color set): warm white so the lamp
   // is visible, matching the single-light fallback.
