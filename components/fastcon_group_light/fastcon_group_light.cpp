@@ -82,11 +82,17 @@ std::vector<uint8_t> FastconGroupLight::build_encrypted_body_(
     uint8_t n, const std::vector<uint8_t> &data, bool forward, uint8_t lightness) {
   std::vector<uint8_t> body(data.size() + 4, 0);
 
+  // Use the explicit mesh key if set, otherwise the controller's.
+  std::array<uint8_t, 4> key = mesh_key_;
+  if (!mesh_key_set_ && controller_ != nullptr) {
+    key = controller_->get_mesh_key();
+  }
+
   body[0] = static_cast<uint8_t>(((n & 0x07) << 4) | (forward ? 0x80 : 0) | (lightness & 0x0F));
   body[1] = sequence_++;
   if (sequence_ == 0 || sequence_ == 0xFF)
     sequence_ = 1;
-  body[2] = mesh_key_[3];
+  body[2] = key[3];
 
   std::copy(data.begin(), data.end(), body.begin() + 4);
 
@@ -101,7 +107,7 @@ std::vector<uint8_t> FastconGroupLight::build_encrypted_body_(
     body[i] ^= fastcon::DEFAULT_ENCRYPT_KEY[i & 3];
 
   for (size_t i = 0; i < data.size(); i++)
-    body[4 + i] ^= mesh_key_[i & 3];
+    body[4 + i] ^= key[i & 3];
 
   return body;
 }
