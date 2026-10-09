@@ -78,6 +78,23 @@ light:
 - **supports_cwww** (*Optional*, boolean): Set to `true` if the light supports cold/warm white channels. Defaults to `false`.
 - **color_interlock** (*Optional*, boolean): Set to `true` to prevent RGB and white LEDs from being on at the same time. Defaults to `false`.
 
+#### Fastcon Broadcast Light
+
+- **controller_id** (*Required*, ID): The ID of the controller to use.
+- **mesh_key** (*Required*, string): The mesh key in hexadecimal format (8 characters/4 bytes).
+- **device_type** (*Optional*, enum): The brMesh device type of the lamps. One of `rgbcw` (RGB + cold/warm white, default), `rgbw` (RGB + single white), `rgb` (RGB only), `cct` (cold/warm white only), or `pwr` (power only). It sets the protocol header type byte and derives the advertised color modes (see table below).
+- **color_interlock** (*Optional*, boolean): Set to `true` to expose separate, interlocked color and white controls instead of one combined control. Defaults to `false`.
+
+The `device_type` determines which color modes the entity advertises to Home Assistant:
+
+| `device_type` | `color_interlock: false` | `color_interlock: true` |
+|---------------|--------------------------|-------------------------|
+| `rgbcw` (43050) | `RGB` + cold/warm white (combined) | `RGB` and cold/warm white (separate) |
+| `rgbw` (43169) | `RGB` + white (combined) | `RGB` and white (separate) |
+| `rgb` (43168) | `RGB` | `RGB` |
+| `cct` (43051) | cold/warm white | cold/warm white |
+| `pwr` (43049) | on/off only | on/off only |
+
 ## Experimental group light control
 
 The `fastcon_group_light` platform sends a temporary brMesh/FastCon group selector followed by one group control command. This avoids queuing one command per lamp and gives near-simultaneous switching for a group of consecutive light IDs.
@@ -139,6 +156,8 @@ Supported features:
 - RGB color
 - Cold/warm white color temperature
 
+The available color modes depend on the `device_type` of your lamps (see **Fastcon Broadcast Light** above). For example, RGB + single-white lamps (`device_type: rgbw`) expose a plain white slider, not a color-temperature slider.
+
 ```yaml
 light:
   - platform: fastcon_broadcast_light
@@ -146,6 +165,8 @@ light:
     name: "All Lamps"
     controller_id: fastcon_controller
     mesh_key: "12345678"
+    device_type: rgbcw       # brMesh device type of the lamps (see below)
+    color_interlock: false   # separate color and white controls
     default_transition_length: 0s
     gamma_correct: 1.0
 ```
