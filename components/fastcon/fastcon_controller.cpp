@@ -114,7 +114,9 @@ void FastconController::loop() {
 
 // --- helpers for channel resolution ---
 static inline uint8_t to8(float v) {
-  if (v < 0.0f) v = 0.0f; if (v > 1.0f) v = 1.0f; return static_cast<uint8_t>(v * 255.0f + 0.5f);
+  if (v < 0.0f) v = 0.0f;
+  if (v > 1.0f) v = 1.0f;
+  return static_cast<uint8_t>(v * 255.0f + 0.5f);
 }
 
 static inline bool all_zero(float r, float g, float b, float cw, float ww) {
