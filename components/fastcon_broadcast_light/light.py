@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import light
-from esphome.const import CONF_OUTPUT_ID
+from esphome.const import CONF_COLOR_INTERLOCK, CONF_OUTPUT_ID
 from esphome.core import HexInt
 
 DEPENDENCIES = ["fastcon", "light"]
@@ -39,6 +39,7 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_CONTROLLER_ID): cv.use_id(FastconController),
             cv.Required(CONF_MESH_KEY): validate_mesh_key,
             cv.Optional(CONF_DEVICE_TYPE, default=43050): cv.int_range(min=0, max=65535),
+            cv.Optional(CONF_COLOR_INTERLOCK, default=False): cv.boolean,
         }
     ).extend(cv.COMPONENT_SCHEMA)
 )
@@ -59,3 +60,6 @@ async def to_code(config):
 
     device_type = config[CONF_DEVICE_TYPE]
     cg.add(var.set_device_type(device_type))
+
+    if config.get(CONF_COLOR_INTERLOCK):
+        cg.add(var.set_color_interlock(True))

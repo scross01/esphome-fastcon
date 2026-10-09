@@ -24,9 +24,50 @@ void FastconBroadcastLight::dump_config() { ESP_LOGCONFIG(TAG, "FastCon Broadcas
 
 light::LightTraits FastconBroadcastLight::get_traits() {
   light::LightTraits traits;
-  traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
-  traits.set_min_mireds(153.0f);
-  traits.set_max_mireds(500.0f);
+  const bool interlock = color_interlock_;
+
+  // Derive the color modes from the device type (the lamp's hardware
+  // capability) and the interlock preference. Device types are the
+  // brMesh constants (see FirstFragment.java:629-676):
+  //   43049 PWR   43050 RGBCW   43051 CCT   43168 RGB   43169 RGBW
+  switch (device_type_) {
+    case 43050:  // RGBCW — RGB + cold/warm white
+      if (interlock) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::COLD_WARM_WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
+      }
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
+    case 43169:  // RGBW — RGB + single white
+      if (interlock) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_WHITE});
+      }
+      break;
+    case 43168:  // RGB only
+      traits.set_supported_color_modes({light::ColorMode::RGB});
+      break;
+    case 43051:  // CCT — cold/warm white only
+      traits.set_supported_color_modes({light::ColorMode::COLD_WARM_WHITE});
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
+    case 43049:  // PWR — power only, no color modes
+      break;
+    default:  // unknown: assume RGBCW combined (backward compatible with plan 026)
+      if (interlock) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::COLD_WARM_WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
+      }
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
+  }
+
   return traits;
 }
 

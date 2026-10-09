@@ -21,6 +21,7 @@ class FastconBroadcastLight : public Component, public light::LightOutput {
   void set_controller(fastcon::FastconController *controller) { controller_ = controller; }
   void set_mesh_key(std::array<uint8_t, 4> key) { mesh_key_ = key; }
   void set_device_type(uint16_t device_type) { device_type_ = device_type; }
+  void set_color_interlock(bool interlock) { color_interlock_ = interlock; }
 
   void dump_config() override;
   light::LightTraits get_traits() override;
@@ -36,6 +37,7 @@ class FastconBroadcastLight : public Component, public light::LightOutput {
   uint8_t sequence_{1};
   bool first_write_{true};
   bool was_on_{false};
+  bool color_interlock_{false};
 };
 
 }  // namespace fastcon_broadcast_light
