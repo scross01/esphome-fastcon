@@ -144,6 +144,13 @@ void FastconGroupLight::write_state(light::LightState *state) {
     return;
   }
 
+  // Power on: the lamps only transition OFF->ON via a 1-byte power
+  // command (0x80). The 6-byte white command below adjusts the
+  // warm/cold mix but does not turn the lamps on.
+  queue_group_control_({0x80});
+  ESP_LOGD(TAG, "Group ON (power) start=%u mask=0x%02X",
+           start_light_id_, mask_);
+
   float brightness = values.get_brightness();
   if (brightness < 0.0f) brightness = 0.0f;
   if (brightness > 1.0f) brightness = 1.0f;

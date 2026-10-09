@@ -94,6 +94,12 @@ void FastconBroadcastLight::write_state(light::LightState *state) {
     return;
   }
 
+  // Power on: the lamps only transition OFF->ON via a 1-byte power
+  // command (0x80). The 6-byte color/white command below adjusts
+  // color/brightness but does not turn the lamp on.
+  queue_broadcast_({0x80});
+  ESP_LOGD(TAG, "All lamps ON (power)");
+
   const float brightness = std::min(std::max(values.get_brightness(), 0.0f), 1.0f);
   uint8_t bri7 = static_cast<uint8_t>(brightness * 127.0f + 0.5f);
   if (bri7 == 0)
