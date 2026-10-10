@@ -173,8 +173,6 @@ light:
   - platform: fastcon_broadcast_light
     id: all_lamps
     name: "All Lamps"
-    controller_id: fastcon_controller
-    mesh_key: "12345678"
     device_type: rgbcw       # brMesh device type of the lamps (see below)
     color_interlock: false   # one combined color and white control
     default_transition_length: 0s
