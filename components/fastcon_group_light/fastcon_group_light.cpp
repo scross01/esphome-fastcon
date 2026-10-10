@@ -13,10 +13,14 @@ namespace fastcon_group_light {
 
 static const char *const TAG = "fastcon_group_light";
 
-static inline uint8_t clamp_u8_(float value) {
+static inline uint8_t to_u8_(float value) {
   if (value <= 0.0f) return 0;
-  if (value >= 255.0f) return 255;
-  return static_cast<uint8_t>(value + 0.5f);
+  if (value >= 1.0f) return 255;
+  return static_cast<uint8_t>(value * 255.0f + 0.5f);
+}
+
+static inline bool all_zero_(float r, float g, float b, float cw, float ww) {
+  return r == 0.0f && g == 0.0f && b == 0.0f && cw == 0.0f && ww == 0.0f;
 }
 
 void FastconGroupLight::dump_config() {
@@ -28,9 +32,49 @@ void FastconGroupLight::dump_config() {
 
 light::LightTraits FastconGroupLight::get_traits() {
   light::LightTraits traits;
-  traits.set_supported_color_modes({light::ColorMode::COLOR_TEMPERATURE});
-  traits.set_min_mireds(153.0f);
-  traits.set_max_mireds(500.0f);
+
+  // Derive the color modes from the device type (the lamp's
+  // hardware capability) and the interlock preference. Device
+  // types are the brMesh constants (see FirstFragment.java:629-676):
+  //   43049 PWR   43050 RGBCW   43051 CCT   43168 RGB   43169 RGBW
+  switch (device_type_) {
+    case 43050:  // RGBCW — RGB + cold/warm white
+      if (color_interlock_) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::COLD_WARM_WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
+      }
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
+    case 43169:  // RGBW — RGB + single white
+      if (color_interlock_) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_WHITE});
+      }
+      break;
+    case 43168:  // RGB only
+      traits.set_supported_color_modes({light::ColorMode::RGB});
+      break;
+    case 43051:  // CCT — cold/warm white only
+      traits.set_supported_color_modes({light::ColorMode::COLD_WARM_WHITE});
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
+    case 43049:  // PWR — power only, no color modes
+      break;
+    default:  // unknown: assume RGBCW combined (backward compatible)
+      if (color_interlock_) {
+        traits.set_supported_color_modes({light::ColorMode::RGB, light::ColorMode::COLD_WARM_WHITE});
+      } else {
+        traits.set_supported_color_modes({light::ColorMode::RGB_COLD_WARM_WHITE});
+      }
+      traits.set_min_mireds(153.0f);
+      traits.set_max_mireds(500.0f);
+      break;
+  }
+
   return traits;
 }
 
@@ -38,11 +82,17 @@ std::vector<uint8_t> FastconGroupLight::build_encrypted_body_(
     uint8_t n, const std::vector<uint8_t> &data, bool forward, uint8_t lightness) {
   std::vector<uint8_t> body(data.size() + 4, 0);
 
+  // Use the explicit mesh key if set, otherwise the controller's.
+  std::array<uint8_t, 4> key = mesh_key_;
+  if (!mesh_key_set_ && controller_ != nullptr) {
+    key = controller_->get_mesh_key();
+  }
+
   body[0] = static_cast<uint8_t>(((n & 0x07) << 4) | (forward ? 0x80 : 0) | (lightness & 0x0F));
   body[1] = sequence_++;
   if (sequence_ == 0 || sequence_ == 0xFF)
     sequence_ = 1;
-  body[2] = mesh_key_[3];
+  body[2] = key[3];
 
   std::copy(data.begin(), data.end(), body.begin() + 4);
 
@@ -57,7 +107,7 @@ std::vector<uint8_t> FastconGroupLight::build_encrypted_body_(
     body[i] ^= fastcon::DEFAULT_ENCRYPT_KEY[i & 3];
 
   for (size_t i = 0; i < data.size(); i++)
-    body[4 + i] ^= mesh_key_[i & 3];
+    body[4 + i] ^= key[i & 3];
 
   return body;
 }
@@ -112,8 +162,8 @@ void FastconGroupLight::queue_group_control_(
       static_cast<uint8_t>((light_data.size() + 3) & 0x0F);
 
   control[0] = static_cast<uint8_t>((high_nibble << 4) | 0x03);
-  control[1] = 0x2A;
-  control[2] = 0xA8;
+  control[1] = static_cast<uint8_t>(device_type_ & 0xFF);
+  control[2] = static_cast<uint8_t>((device_type_ >> 8) & 0xFF);
   control[3] = 0xFD;
 
   const size_t copy_len = std::min<size_t>(light_data.size(), 8);
@@ -139,49 +189,79 @@ void FastconGroupLight::write_state(light::LightState *state) {
 
   if (!is_on) {
     queue_group_control_({0x00});
+    was_on_ = false;
     ESP_LOGD(TAG, "Group OFF start=%u mask=0x%02X",
              start_light_id_, mask_);
     return;
   }
 
   // Power on: the lamps only transition OFF->ON via a 1-byte power
-  // command (0x80). The 6-byte white command below adjusts the
-  // warm/cold mix but does not turn the lamps on.
-  queue_group_control_({0x80});
-  ESP_LOGD(TAG, "Group ON (power) start=%u mask=0x%02X",
-           start_light_id_, mask_);
+  // command (0x80). Send it only on that transition — the app does
+  // not repeat it for brightness/color/white changes while the lamp
+  // is already on, and repeating it resets the lamp to its previous
+  // state, which overrides the 6-byte command below.
+  if (!was_on_) {
+    queue_group_control_({0x80});
+    ESP_LOGD(TAG, "Group ON (power) start=%u mask=0x%02X",
+             start_light_id_, mask_);
+  }
+  was_on_ = true;
 
-  float brightness = values.get_brightness();
-  if (brightness < 0.0f) brightness = 0.0f;
-  if (brightness > 1.0f) brightness = 1.0f;
-  uint8_t bri7 = static_cast<uint8_t>(brightness * 127.0f);
+  const float brightness = std::min(std::max(values.get_brightness(), 0.0f), 1.0f);
+  uint8_t bri7 = static_cast<uint8_t>(brightness * 127.0f + 0.5f);
   if (bri7 == 0)
     bri7 = 1;
+  const uint8_t on_bri = static_cast<uint8_t>(0x80 | bri7);
 
-  float mired = values.get_color_temperature();
-  if (mired < 153.0f) mired = 153.0f;
-  if (mired > 500.0f) mired = 500.0f;
+  // White-only command. ESPHome's current_values_as_rgbww() returns
+  // all zeros for WHITE mode — the white value lives in a separate
+  // channel that as_rgb()/as_cwww() do not read for WHITE — so it
+  // cannot be resolved that way. The app sends warm=cold=0x7F with
+  // the brightness in byte 0 (docs/GROUP_PROTOCOL.md), matching the
+  // single light's get_white_light_data().
+  if (values.get_color_mode() == light::ColorMode::WHITE) {
+    queue_group_control_({on_bri, 0x00, 0x00, 0x00, 0x7F, 0x7F});
+    ESP_LOGD(TAG, "Group white bri=%u/127 start=%u mask=0x%02X",
+             bri7, start_light_id_, mask_);
+    return;
+  }
 
-  const float warm_ratio = (mired - 153.0f) / (500.0f - 153.0f);
-  const float cold_ratio = 1.0f - warm_ratio;
+  // Resolve the channel levels for the current color mode. This
+  // handles RGB, COLD_WARM_WHITE and the combined RGB_COLD_WARM_WHITE
+  // mode, so a color-temperature change is emitted as warm/cold bytes.
+  float r = 0.0f, g = 0.0f, b = 0.0f, cw = 0.0f, ww = 0.0f;
+  state->current_values_as_rgbww(&r, &g, &b, &cw, &ww, /*constant_brightness=*/false);
 
-  const uint8_t warm = clamp_u8_(warm_ratio * 255.0f);
-  const uint8_t cold = clamp_u8_(cold_ratio * 255.0f);
+  // Fallback for zeroed channels (no color set): RGB/RGBW lamps
+  // have no cold/warm white LEDs, so fall back to RGB white;
+  // RGBCW/CCT lamps fall back to warm white, so the lamp is
+  // visible.
+  if (all_zero_(r, g, b, cw, ww)) {
+    switch (device_type_) {
+      case 43168:  // RGB only
+      case 43169:  // RGBW (single white, no CW/WW)
+        r = g = b = 1.0f;
+        break;
+      default:  // 43050 RGBCW, 43051 CCT, unknown (assume RGBCW)
+        ww = 1.0f;
+        break;
+    }
+  }
 
   std::vector<uint8_t> light_data{
-      static_cast<uint8_t>(0x80 | bri7),
-      0x00,
-      0x00,
-      0x00,
-      warm,
-      cold,
+      on_bri,
+      to_u8_(b),   // Blue
+      to_u8_(r),   // Red
+      to_u8_(g),   // Green
+      to_u8_(ww),  // Warm
+      to_u8_(cw),  // Cold
   };
-
   queue_group_control_(light_data);
 
   ESP_LOGD(TAG,
-           "Group ON start=%u mask=0x%02X bri=%u ct=%.1f warm=%u cold=%u",
-           start_light_id_, mask_, bri7, mired, warm, cold);
+           "Group ON start=%u mask=0x%02X bri=%u R=%u G=%u B=%u warm=%u cold=%u",
+           start_light_id_, mask_, bri7, to_u8_(r), to_u8_(g), to_u8_(b),
+           to_u8_(ww), to_u8_(cw));
 }
 
 }  // namespace fastcon_group_light

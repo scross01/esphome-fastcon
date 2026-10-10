@@ -15,7 +15,7 @@ Be warned - there is also a brLight app, which might look like brMesh, but the p
 - Brightness control
 - RGB color control
 - White mode
-- Experimental group on/off, brightness and cold/warm white control
+- Experimental group on/off, brightness, RGB color and cold/warm white control
 - Experimental broadcast control of all lamps (on/off, brightness, RGB, cold/warm white)
 
 ## Configuration
@@ -95,6 +95,17 @@ The `device_type` determines which color modes the entity advertises to Home Ass
 | `cct` (43051) | cold/warm white | cold/warm white |
 | `pwr` (43049) | on/off only | on/off only |
 
+#### Fastcon Group Light
+
+- **start_light_id** (*Required*, int): The ID of the first lamp in the group (1-255).
+- **mask** (*Required*, int): Bit mask selecting the consecutive lamp IDs in the group (1-255).
+- **name** (*Required*, string): The name for the light entity.
+- **id** (*Optional*, ID): The ID to use for this light component.
+- **controller_id** (*Optional*, ID): The ID of the controller to use. Defaults to "fastcon_controller".
+- **mesh_key** (*Optional*, string): The mesh key in hexadecimal format (8 characters/4 bytes). Defaults to the controller's mesh key.
+- **device_type** (*Optional*, enum): The brMesh device type of the lamps in the group. Set it to the group's `viewType` (the union of its lamps' types): a mixed RGB+CCT group collapses to `rgbcw`. One of `rgbcw` (RGB + cold/warm white, default), `rgbw` (RGB + single white), `rgb` (RGB only), `cct` (cold/warm white only), or `pwr` (power only). It sets the protocol header type byte and derives the advertised color modes (see the broadcast light table above).
+- **color_interlock** (*Optional*, boolean): Set to `true` to expose separate, interlocked color and white controls instead of one combined control. Defaults to `false`.
+
 ## Experimental group light control
 
 The `fastcon_group_light` platform sends a temporary brMesh/FastCon group selector followed by one group control command. This avoids queuing one command per lamp and gives near-simultaneous switching for a group of consecutive light IDs.
@@ -103,6 +114,7 @@ Supported group features:
 
 - On/off
 - Brightness
+- RGB color
 - Cold/warm white color temperature
 - Native ESPHome/Home Assistant light entity
 
@@ -117,8 +129,6 @@ light:
   - platform: fastcon_group_light
     id: living_room_group
     name: "Living Room"
-    controller_id: fastcon_controller
-    mesh_key: "12345678"
     start_light_id: 12
     mask: 0x3F
     default_transition_length: 0s
@@ -133,15 +143,15 @@ Examples:
 - `start_light_id: 7`, `mask: 0x1F` -> IDs 7..11
 - `start_light_id: 12`, `mask: 0x3F` -> IDs 12..17
 
-The implementation currently exposes a 153-500 mired color-temperature range. It has been tested with ESPHome 2026.8.2 on an ESP32-S3 with 23 brMesh/FastCon lamps split into five groups. Group sizes of 3, 5 and 6 lamps were tested for on/off, brightness and color temperature.
+The RGBCW and CCT device types expose a 153-500 mired color-temperature range. It has been tested with ESPHome 2026.8.2 on an ESP32-S3 with 23 brMesh/FastCon lamps split into five groups. Group sizes of 3, 5 and 6 lamps were tested for on/off, brightness and color temperature.
 
 Current limitations:
 
 - Lamp IDs in a group must be contiguous.
-- RGB group control is not implemented.
 - The bulbs do not acknowledge commands or report state back.
 - The 8-bit mask implies up to 8 consecutive IDs, but the 8-lamp case has not been tested.
 - The group protocol is reverse engineered and may differ across app/firmware variants.
+- Unlike the broadcast light, the restored state is sent at boot, so the lamps may switch when the ESP restarts.
 
 See `docs/GROUP_PROTOCOL.md` for the reverse-engineered protocol notes and `examples/group_lights.yaml` for more examples.
 
